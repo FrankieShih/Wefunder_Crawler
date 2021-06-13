@@ -1,7 +1,7 @@
 # Wefunder_Crawler
 
 # Requirements
-python, scrapy, selenium, chromedriver, Chrome
+python2.7, scrapy, selenium, chromedriver, Chrome
 
 # What does it do
 Crawl project info from Wefunder.com:
