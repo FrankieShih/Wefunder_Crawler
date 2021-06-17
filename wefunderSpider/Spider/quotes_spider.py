@@ -9,8 +9,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 
-url_details = ["https://wefunder.com/betabionics/details", "https://wefunder.com/suechef/details","https://wefunder.com/everipedia/details","https://wefunder.com/moderntimesbeer/details","https://wefunder.com/zenefits"]
-url_detail = url_details[4];
+url_root = "https://wefunder.com/explore"
 class QuotesSpider(scrapy.Spider):
     name = "quotes"
     allowed_domains = ['wefunder.com']
@@ -18,11 +17,11 @@ class QuotesSpider(scrapy.Spider):
     def start_requests(self):
         self.driver = webdriver.Chrome()
         headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'}  
-        yield scrapy.Request(url=url_detail, callback=self.parse, headers = headers)
+        yield scrapy.Request(url=url_root, callback=self.parse, headers = headers)
 
 
     def parse(self, response):
-        self.driver.get(url_detail)
+        self.driver.get(url_root)
         # --------------------config area--------------------#
 
         #
@@ -30,29 +29,6 @@ class QuotesSpider(scrapy.Spider):
         # --------------------below is the selector--------------------#
         # get the start window handle
         mainwin = self.driver.current_window_handle
-
-        # # switch to hotel search container
-        # htBtn = self.driver.find_element_by_id('tab-hotel-tab-hp')
-        # htBtn.click()
-
-        # # get input objects
-        # dest = self.driver.find_element_by_id('hotel-destination-hp-hotel')
-        # checkInDate = self.driver.find_element_by_id('hotel-checkin-hp-hotel')
-        # checkOutDate = self.driver.find_element_by_id('hotel-checkout-hp-hotel')
-        # searchButton = self.driver.find_element_by_xpath("//*[@id='gcw-hotel-form-hp-hotel']/div[12]/label/button")
-
-        # # clear and write value to input objects
-        # dest.clear()
-        # dest.send_keys(destInput)
-        # checkInDate.clear()
-        # checkInDate.send_keys(checkInDateInput)
-        # checkOutDate.clear()
-        # checkOutDate.send_keys(checkOutDateInput)
-    
-        # if (int(oneP) == 1):
-        #     people.click()
-        # time.sleep(3)
-
         projectCount = 0
         
         # # starting search
@@ -78,31 +54,55 @@ class QuotesSpider(scrapy.Spider):
 
         # sel = scrapy.Selector(text = self.driver.page_source);
         
-        # click the more button and load more pages
-        # more_flag = 1
-        # clickCount = 1
-        # while(more_flag):
-        #     js="var q=document.documentElement.scrollTop=10000"  
-        #     self.driver.execute_script(js)  
-        #     time.sleep(1) 
-        #     try:
-        #         moreButton = self.driver.find_element_by_class_name("uitk-button.uitk-button-small.uitk-button-secondary")
-        #         moreButton.click()
-        #         clickCount += 1
-        #         print('Loading the page ' + str(clickCount))
-        #         time.sleep(3)
-        #     except:
-        #         more_flag = 0
+        #click the more button and load more pages
+        more_flag = 1
+        clickCount = 1
+        while(more_flag):
+            js="var q=document.documentElement.scrollTop=10000"  
+            self.driver.execute_script(js)  
+            time.sleep(1) 
+            try:
+                moreButtons = self.driver.find_elements_by_class_name("wf-secondary.explore_load_more")
+                moreButton = moreButtons[1]
+                moreButton.click()
+                clickCount += 1
+                print('Loading the page ' + str(clickCount))
+                time.sleep(1)
+            except:
+                more_flag = 0
 
 
-        # # # get the hotels' links on the result pages
+        # # # get the projects' links on the result pages
+
         projectmetrics = WefunderItem()
-        projectmetrics['link'] = url_detail
+        
+        headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'}
+        funded_projects_page = self.driver.find_element_by_class_name("funded")
+        funded_projects = funded_projects_page.find_elements_by_class_name("company-url-bn")
+        crawlCount = 0
+        for funded_project in funded_projects:
+            projectmetrics['link'] = funded_project.get_attribute("href")
+            crawlCount += 1
+            print('Requesting project ' + str(crawlCount))
+            url_detail = projectmetrics['link'] + "/details"
+            yield scrapy.Request(url = url_detail, headers = headers, callback=self.detail_parse)
+
+        self.driver.quit()
+
+
+
+
+    def detail_parse(self, response):
+
+        projectmetrics = WefunderItem()
+
+        projectmetrics['link'] = response.url
         # basic information
         projectmetrics['project_name'] = response.xpath('//*[@id="company-profile-2021"]/div[1]/div[1]/div/div/div[1]/h1/b/text()').extract_first()
         projectmetrics['slogen'] = response.xpath('//*[@id="company-profile-2021"]/div[1]/div[1]/div/div/div[1]/h2/text()').extract_first()
         projectmetrics['money_raised'] = response.xpath('//*[@id="js-sidebar-height"]/div[2]/h4/text()').extract_first()
         projectmetrics['number_of_investor'] = response.xpath('//*[@id="js-sidebar-height"]/div[2]/div[1]/text()').extract_first()
+                                                                                                    #Important Notice Open to accredited investors only. if this tag shows, use div[2]
         # financial information 
         projectmetrics['revenue'] = response.xpath('//*[@id="profile-content-container"]/div[3]/div[1]/div/text()').extract_first()
         projectmetrics['net_loss']= response.xpath('//*[@id="profile-content-container"]/div[3]/div[2]/div/text()').extract_first()
@@ -119,27 +119,4 @@ class QuotesSpider(scrapy.Spider):
         projectmetrics['revenue_to_receivables'] = response.xpath('//*[@id="profile-content-container"]/*[@class="flex flex-wrap coolgray mt-6 mb-12"]/div[7]/div/text()').extract_first()
         projectmetrics['debt_ratio'] = response.xpath('//*[@id="profile-content-container"]/*[@class="flex flex-wrap coolgray mt-6 mb-12"]/div[8]/div/text()').extract_first()
         
-
-        headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'}
-        # hotels = self.driver.find_elements_by_class_name("listing__link.uitk-card-link")
-        # crawlCount = 0
-        # for hotel in hotels:
-        #     hotelmodel['link'] = hotel.get_attribute("href")
-        #     crawlCount += 1
-        #     print('Requesting hotel ' + str(crawlCount))
-        #     yield scrapy.Request(url = hotelmodel['link'], headers = headers, callback=self.detail_parse)
-
-        yield projectmetrics
-        self.driver.quit()
-
-
-
-
-    def detail_parse(self, response):
-
-        projectCount += 1
-        print('Crwaling project ' + str(projectCount))
-        projectmetrics = WefunderItem()    
-        projectmetrics['link'] = response.url
-
         return projectmetrics
